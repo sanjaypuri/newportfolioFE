@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import Select from 'react-select';
 import moment from 'moment';
 
@@ -13,7 +13,7 @@ export default function Home() {
       'token': token
     }
   }
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
 
   const [portfolio, setPortfolio] = useState([]);
   const [purchase, setPurchase] = useState(0);
@@ -29,10 +29,19 @@ export default function Home() {
     qty: null,
     rate: null
   });
+  const [salerec, setSalerec] = useState({
+    date: null,
+    qty: null,
+    rate: null
+  });
   const [newrec, setNewrec] = useState({
     date: null,
     qty: null,
     rate: null
+  });
+  const [buyref, setBuyref] = useState({
+    buyid:0,
+    maxQty:0
   });
   const [saleList, setSaleList] = useState([]);
 
@@ -49,7 +58,8 @@ export default function Home() {
           let i;
           let purchasex = 0, salex = 0, rgainx = 0, cvaluex = 0, ugainx = 0, cratex = 0;
           for (i = 0; i < res.data.data.length; i++) {
-            purchasex += res.data.data[i].buyamount;
+            purchasex += res.data.data[i].qtyinhand*res.data.data[i].buyavgrate;
+            // purchasex += res.data.data[i].buyamount;
             salex += res.data.data[i].saleamount;
             rgainx += res.data.data[i].realisedprofit;
             cvaluex += res.data.data[i].currentvalue;
@@ -95,6 +105,23 @@ export default function Home() {
     }
   };
 
+  const handleNewSell = (id, maxQty) => {
+    document.getElementById("id03").style.display = "block";
+    document.getElementById("sdate").value = "";
+    document.getElementById("sqty").value = "";
+    document.getElementById("srate").value = "";
+    setBuyref({
+      buyid:id,
+      maxQty:maxQty
+    });
+    setSalerec({
+      date: "",
+      qty: "",
+      rate: ""
+    });
+    setSelected({ value: 0, label: "" });
+  };
+
   const handleNewInvest = () => {
     document.getElementById("id01").style.display = "block"
     document.getElementById("date").value = "";
@@ -114,6 +141,41 @@ export default function Home() {
 
   const handleCloseRowModal = () => {
     document.getElementById("id02").style.display = "none"
+  };
+
+  const handleCloseSale = () => {
+    document.getElementById("id03").style.display = "none"
+    document.getElementById("id02").style.display = "none"
+  };
+
+  const handleSaveSale = () => {
+    if(!validSale()){
+      return;
+    };
+    axios.post("http://localhost:5000/api/home/sell", {
+      buyid:buyref.buyid,
+      shareid: selected.value,
+      saledate: salerec.date,
+      saleqty: salerec.qty,
+      salerate: salerec.rate
+    }, baseHeaders)
+      .then(res => {
+        if (res.data.success) {
+          toast.success(res.data.message);
+          handleCloseSale();
+          handleCloseRowModal();
+          setNewrec({
+            date: invest.date,
+            qty: invest.qty,
+            rate: invest.rate
+          })
+        } else {
+          toast.error(res.data.error);
+        };
+      })
+      .catch(err => {
+        toast.error(err);
+      })
   };
 
   const handleSaveInvest = () => {
@@ -150,7 +212,6 @@ export default function Home() {
       toast.error("Please select a company");
       return false;
     }
-    // alert(invest.date)
     if (invest.date === null || invest.date === "") {
       toast.error("Please enter a date of Purchase");
       return false;
@@ -168,11 +229,43 @@ export default function Home() {
       return false;
     };
     if (invest.rate === '' || invest.rate === null) {
-      // alert(invest.rate)
       toast.error("Please enter Purchase Rate");
       return false;
     };
     if (!parseFloat(invest.rate)) {
+      toast.error("Rate entered is not a valid number");
+      return false;
+    };
+    return true;
+  };
+
+  const validSale = () => {
+    const today = moment();
+    if (selected.label === null || selected.label === "") {
+      toast.error("Please select a company");
+      return false;
+    }
+    if (salerec.date === null || salerec.date === "") {
+      toast.error("Please enter a date of Sale");
+      return false;
+    };
+    if (salerec.date > today.format("YYYY-MM-DD")) {
+      toast.error("Sale date should be of after today")
+      return false;
+    };
+    if (salerec.qty === '' || salerec.qty === null) {
+      toast.error("Please enter Sale Qty");
+      return false;
+    };
+    if (!parseInt(salerec.qty)) {
+      toast.error("Qty entered is not a valid number");
+      return false;
+    };
+    if (salerec.rate === '' || salerec.rate === null) {
+      toast.error("Please enter Purchase Rate");
+      return false;
+    };
+    if (!parseFloat(salerec.rate)) {
       toast.error("Rate entered is not a valid number");
       return false;
     };
@@ -184,7 +277,7 @@ export default function Home() {
   };
 
   const handleRow = (symbol, company, qty) => {
-    if(qty === 0) return;
+    if (qty === 0) return;
     document.getElementById("id02").style.display = "block";
     axios.post("http://localhost:5000/api/home/listforsale", { symbol: symbol }, baseHeaders)
       .then(res => {
@@ -206,27 +299,34 @@ export default function Home() {
   };
 
   const handleDelete = (id) => {
-    axios.delete(`http://localhost:5000/api/home/deletebuy/${id}`, baseHeaders)
-      .then(res => {
-        if (res.data.success) {
-          toast.success(res.data.message);
-          setNewrec({
-            date:null,
-            qty:null,
-            rate:null
-          });
-          document.getElementById("id02").style.display = "none";
-        } else {
-          toast.error(res.data.error);
-        };
-      })
-      .catch(err =>{});
-  };
+    // let checkDelete = new Promise(function(myresolve, myreject){
+    //   myresolve();
+    //   myreject();
+    // });
 
-  const handleSell = (id, maxQty) => {
-    document.getElementById("id02").style.display = "none";
-    alert(`Record no ${id} sold ${maxQty} nos`);
-  };
+    // checkDelete.then(
+
+    // );
+    // document.getElementById("id03").style.display = "block";
+    axios.delete(`http://localhost:5000/api/home/deletebuy/${id}`, baseHeaders)
+    .then(res => {
+      if (res.data.success) {
+        toast.success(res.data.message);
+        setNewrec({
+          date: null,
+          qty: null,
+          rate: null
+        });
+        // document.getElementById("id03").style.display = "none";
+        document.getElementById("id02").style.display = "none";
+      } else {
+        toast.error(res.data.error);
+      };
+    })
+    .catch(err => {
+      toast.error(err);
+    });
+};
 
   return (
     <div>
@@ -301,15 +401,15 @@ export default function Home() {
                   </div>
                   <div className="mt-2 row">
                     <div className="mb-3 col-4">
-                      <label for="exampleFormControlInput1" class="form-label text-bg-dark">Date</label>
+                      <label htmlFor="date" class="form-label text-bg-dark">Date</label>
                       <input type="date" class="form-control" id="date" onChange={(e) => setInvest({ ...invest, date: e.target.value })} />
                     </div>
                     <div className="mb-3 col-4">
-                      <label for="exampleFormControlInput1" class="form-label text-bg-dark">Qty</label>
+                      <label htmlFor="qty" class="form-label text-bg-dark">Qty</label>
                       <input type="number" class="form-control" id="qty" placeholder="Qty" onChange={(e) => setInvest({ ...invest, qty: e.target.value })} />
                     </div>
                     <div className="mb-3 col-4">
-                      <label for="exampleFormControlInput1" class="form-label text-bg-dark">Rate</label>
+                      <label htmlFor="rate" class="form-label text-bg-dark">Rate</label>
                       <input type="number" class="form-control" id="rate" placeholder="Rate" onChange={(e) => setInvest({ ...invest, rate: e.target.value })} />
                     </div>
                   </div>
@@ -341,8 +441,19 @@ export default function Home() {
                         <tr>
                           <td className="text-end">{record.qtyinhand}</td>
                           <td className="text-end">{convert2D(record.buyrate)}</td>
-                          <td className="text-end">{convert2D(record.buyrate*record.qtyinhand)}</td>
-                          <td><button className="btn btn-sm btn-outline-primary me-1" style={{fontSize:'0.6rem'}} onClick={()=>{handleSell(record.id, record.qtyinhand)}}>&nbsp;&nbsp;Sell&nbsp;&nbsp;</button><button className="btn btn-sm btn-outline-danger" style={{fontSize:'0.6rem'}} onClick={()=>{handleDelete(record.id)}}>Delete</button></td>
+                          <td className="text-end">{convert2D(record.buyrate * record.qtyinhand)}</td>
+                          <td>
+                            <button className="btn btn-sm btn-outline-primary me-1"
+                              style={{ fontSize: '0.6rem' }}
+                              onClick={() => { handleNewSell(record.id, record.qtyinhand) }}>
+                              &nbsp;&nbsp;Sell&nbsp;&nbsp;
+                            </button>
+                            <button className="btn btn-sm btn-outline-danger"
+                              style={{ fontSize: '0.6rem' }}
+                              onClick={() => { handleDelete(record.id) }}>
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -351,6 +462,41 @@ export default function Home() {
                 <div className="modal-footer mb-3">
                   <button type="button" className="btn btn-dark me-3" onClick={handleCloseRowModal}>Close</button>
                   {/* <button type="button" className="btn btn-warning" onClick={handleSaveInvest}>Save changes</button> */}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="id03" className="w3-modal">
+            <div className="w3-modal-content bg-dark" style={{ width: '35%' }}>
+              <div className="w3-container">
+                <span onClick={handleCloseSale} className="w3-button w3-display-topright text-bg-dark">&times;</span>
+                <div>New Sale</div>
+                <div className="modal-body" style={{ fontSize: '0.8rem' }}>
+                  <div>
+                    <label className="text-bg-dark mb-1"><b>Select Share</b></label>
+                    <Select
+                      options={options}
+                      onChange={handleCompany}
+                    />
+                  </div>
+                  <div className="mt-2 row">
+                    <div className="mb-3 col-4">
+                      <label htmlFor="sdate" class="form-label text-bg-dark">Date</label>
+                      <input type="date" class="form-control" id="sdate" onChange={(e) => setSalerec({ ...salerec, date: e.target.value })} />
+                    </div>
+                    <div className="mb-3 col-4">
+                      <label htmlFor="sqty" class="form-label text-bg-dark">Qty</label>
+                      <input type="number" class="form-control" id="sqty" placeholder="Qty" onChange={(e) => setSalerec({ ...salerec, qty: e.target.value })} />
+                    </div>
+                    <div className="mb-3 col-4">
+                      <label htmlFor="srate" class="form-label text-bg-dark">Rate</label>
+                      <input type="number" class="form-control" id="srate" placeholder="Rate" onChange={(e) => setSalerec({ ...salerec, rate: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer mb-3">
+                  <button type="button" className="btn btn-dark me-3" onClick={handleCloseSale}>Close</button>
+                  <button type="button" className="btn btn-warning" onClick={handleSaveSale}>Save</button>
                 </div>
               </div>
             </div>
